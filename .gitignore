@@ -1,0 +1,13 @@
+# Arquivos de ambiente - Contém segredos!
+.env
+
+# Banco de dados vetorial local
+.chromadb/
+
+# Arquivos gerados pelo Python
+__pycache__/
+*.pyc
+
+# Arquivos de dados gerados pela aplicação
+documentos_processados.json
+historico_conversas.json
