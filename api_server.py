@@ -12,7 +12,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import json
 import secrets
@@ -68,6 +68,13 @@ documentos_carregados = False
 # Armazena histórico de conversas (em produção, usar banco de dados)
 conversas = {}
 
+# Armazena timestamps da última atividade de cada sessão
+ultima_atividade = {}
+
+# Configurações de sessão
+TIMEOUT_SESSAO_MINUTOS = 5  # Tempo de inatividade para limpar sessão
+MAX_MENSAGENS_CONTEXTO = 10  # Máximo de mensagens no contexto (evita estouro de tokens)
+
 # Models Pydantic para validação
 class ChatMessage(BaseModel):
     mensagem: str
@@ -97,12 +104,27 @@ class DocumentoInfo(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    """Inicializa o assistente ao iniciar a API (sem carregar documentos)."""
-    global assistente
+    """Inicializa o assistente e carrega documentos em background."""
+    global assistente, documentos_carregados
     print("🚀 Inicializando Assistente IA Sebrae...")
     assistente = AssistenteSebrae()
     print("✅ Assistente IA Sebrae pronto!")
-    print("💡 Documentos serão carregados automaticamente na primeira consulta")
+    
+    # Carrega documentos em background thread para não bloquear startup
+    import threading
+    def carregar_docs_background():
+        global documentos_carregados
+        if os.path.exists(DIRETORIO_DOCS):
+            print("� Carregando documentos em background...")
+            try:
+                assistente.carregar_documentos(DIRETORIO_DOCS)
+                documentos_carregados = True
+                print("✅ Documentos carregados com sucesso!")
+            except Exception as e:
+                print(f"⚠️ Erro ao carregar documentos: {e}")
+    
+    threading.Thread(target=carregar_docs_background, daemon=True).start()
+    print("💡 Carregamento de documentos iniciado em background...")
 
 @app.get("/")
 async def root():
@@ -153,6 +175,80 @@ async def static_styles_css():
 async def static_app_js():
     """Serve o arquivo JavaScript via /static/."""
     return FileResponse("frontend/app.js", media_type="application/javascript")
+
+def limpar_sessoes_inativas():
+    """
+    Limpa sessões que estão inativas há mais de TIMEOUT_SESSAO_MINUTOS.
+    """
+    global conversas, ultima_atividade
+    agora = datetime.now()
+    timeout = timedelta(minutes=TIMEOUT_SESSAO_MINUTOS)
+    
+    sessoes_para_remover = []
+    
+    for session_id, ultimo_acesso in list(ultima_atividade.items()):
+        if agora - ultimo_acesso > timeout:
+            sessoes_para_remover.append(session_id)
+    
+    for session_id in sessoes_para_remover:
+        if session_id in conversas:
+            print(f"🧹 Limpando sessão inativa: {session_id}")
+            del conversas[session_id]
+        if session_id in ultima_atividade:
+            del ultima_atividade[session_id]
+    
+    return len(sessoes_para_remover)
+
+def atualizar_atividade_sessao(session_id: str):
+    """
+    Atualiza o timestamp de última atividade da sessão.
+    """
+    global ultima_atividade
+    ultima_atividade[session_id] = datetime.now()
+
+def limitar_contexto_sessao(session_id: str):
+    """
+    Limita o número de mensagens no contexto para evitar estouro de tokens.
+    Mantém apenas as MAX_MENSAGENS_CONTEXTO mais recentes.
+    """
+    global conversas
+    
+    if session_id in conversas and len(conversas[session_id]) > MAX_MENSAGENS_CONTEXTO:
+        # Mantém apenas as mensagens mais recentes
+        conversas[session_id] = conversas[session_id][-MAX_MENSAGENS_CONTEXTO:]
+        print(f"⚠️ Contexto da sessão {session_id} limitado a {MAX_MENSAGENS_CONTEXTO} mensagens")
+        return True
+    return False
+
+def obter_historico_formatado(session_id: str, limite: int = 5) -> str:
+    """
+    Retorna o histórico de conversas formatado para incluir no contexto do LLM.
+    
+    Args:
+        session_id: ID da sessão
+        limite: Número de mensagens recentes a incluir (padrão: 5)
+        
+    Returns:
+        String formatada com o histórico
+    """
+    global conversas
+    
+    if session_id not in conversas or not conversas[session_id]:
+        return ""
+    
+    # Pega as últimas N mensagens
+    mensagens_recentes = conversas[session_id][-limite:]
+    
+    historico_formatado = "### HISTÓRICO DA CONVERSA (Mensagens anteriores):\n\n"
+    
+    for i, msg in enumerate(mensagens_recentes, 1):
+        historico_formatado += f"**Mensagem {i}:**\n"
+        historico_formatado += f"👤 Usuário: {msg['usuario']}\n"
+        historico_formatado += f"🤖 Assistente: {msg['assistente'][:200]}...\n\n"  # Resumo
+    
+    historico_formatado += "### FIM DO HISTÓRICO\n\n"
+    
+    return historico_formatado
 
 def carregar_documentos_se_necessario():
     """Carrega documentos sob demanda (lazy loading) apenas na primeira vez."""
@@ -225,17 +321,72 @@ async def chat(
     """
     Processa uma mensagem do usuário e retorna resposta do assistente.
     
+    **Com memória de conversação e timeout de inatividade.**
+    **Com sistema de menu: 1 = Base de Dados, 2 = LLM Livre**
     **Requer autenticação via token JWT.**
     """
     if not assistente:
         raise HTTPException(status_code=503, detail="Assistente não inicializado")
     
-    # Carrega documentos na primeira consulta (lazy loading)
-    carregar_documentos_se_necessario()
+    # REMOVIDO: Não bloqueia mais esperando documentos
+    # A função carregar_documentos_se_necessario() foi removida daqui
+    # Os documentos são carregados em background no startup
+    
+    # Define session_id baseado no usuário
+    session_id = f"user_{current_user.id}"
+    
+    # Limpa sessões inativas globalmente
+    sessoes_limpas = limpar_sessoes_inativas()
+    if sessoes_limpas > 0:
+        print(f"🧹 {sessoes_limpas} sessão(ões) inativa(s) removida(s)")
+    
+    # Atualiza timestamp de atividade da sessão atual
+    atualizar_atividade_sessao(session_id)
+    
+    # Verifica se precisa limitar o contexto
+    contexto_foi_limitado = limitar_contexto_sessao(session_id)
+    
+    # **NOVO: Verifica se é a primeira interação do usuário**
+    primeira_interacao = session_id not in conversas or len(conversas.get(session_id, [])) == 0
+    
+    # Se for a primeira interação E a mensagem for uma saudação genérica, exibe o menu
+    saudacoes = ['oi', 'olá', 'ola', 'hey', 'hi', 'hello', 'bom dia', 'boa tarde', 'boa noite']
+    mensagem_lower = message.mensagem.strip().lower()
+    
+    if primeira_interacao and (mensagem_lower in saudacoes or len(mensagem_lower) < 10):
+        # Força exibição do menu enviando string vazia para o assistente
+        resultado = assistente.processar_consulta("")
+        
+        return ChatResponse(
+            resposta=resultado.get("resposta", ""),
+            consultores=[],
+            documentos=[],
+            confianca=1.0,
+            fonte="menu",
+            usado_internet=False
+        )
     
     try:
-        # Processa consulta
-        resultado = assistente.processar_consulta(message.mensagem)
+        # Obtém histórico formatado para incluir no contexto
+        historico_contexto = obter_historico_formatado(session_id, limite=5)
+        
+        # Monta a consulta com contexto histórico
+        consulta_com_contexto = message.mensagem
+        if historico_contexto:
+            consulta_com_contexto = f"""{historico_contexto}
+
+### NOVA PERGUNTA DO USUÁRIO:
+{message.mensagem}
+
+**INSTRUÇÕES:**
+- Considere o histórico acima ao responder
+- Se a pergunta se referir a algo mencionado anteriormente ("isso", "aquilo", "a anterior"), use o contexto
+- Mantenha a coerência com respostas anteriores
+- Se for um novo assunto, responda normalmente
+"""
+        
+        # Processa consulta com contexto
+        resultado = assistente.processar_consulta(consulta_com_contexto)
         
         # Extrai informações da resposta
         resposta_texto = resultado.get("resposta", "")
@@ -245,21 +396,27 @@ async def chat(
         # Avalia confiança (simplificado)
         confianca = 0.8 if fontes else 0.5
         
-        # Salva no histórico vinculado ao usuário
-        session_id = f"user_{current_user.id}"
+        # Inicializa histórico se não existir
         if session_id not in conversas:
             conversas[session_id] = []
         
+        # Salva no histórico vinculado ao usuário
         conversas[session_id].append({
-            "usuario": message.mensagem,
+            "usuario": message.mensagem,  # Salva pergunta original (sem contexto)
             "assistente": resposta_texto,
             "timestamp": datetime.now().isoformat(),
             "user_id": current_user.id,
-            "user_email": current_user.email
+            "user_email": current_user.email,
+            "contexto_limitado": contexto_foi_limitado  # Flag se contexto foi resetado
         })
         
+        # Adiciona aviso se o contexto foi limitado
+        aviso_contexto = ""
+        if contexto_foi_limitado:
+            aviso_contexto = f"\n\n_ℹ️ Nota: O histórico da conversa foi limitado às últimas {MAX_MENSAGENS_CONTEXTO} mensagens para otimizar o desempenho._"
+        
         return ChatResponse(
-            resposta=resposta_texto,
+            resposta=resposta_texto + aviso_contexto,
             consultores=consultores,
             documentos=fontes,
             confianca=confianca,
@@ -288,25 +445,93 @@ async def limpar_historico(current_user: User = Depends(get_current_active_user)
     if session_id in conversas:
         conversas[session_id] = []
     
+    if session_id in ultima_atividade:
+        del ultima_atividade[session_id]
+    
     return {"mensagem": "Histórico limpo com sucesso"}
 
+@app.get("/api/sessao/status")
+async def status_sessao(current_user: User = Depends(get_current_active_user)):
+    """
+    Retorna informações sobre a sessão atual do usuário.
+    """
+    session_id = f"user_{current_user.id}"
+    
+    # Verifica se há histórico
+    num_mensagens = len(conversas.get(session_id, []))
+    
+    # Calcula tempo desde última atividade
+    ultima_msg = None
+    tempo_inativo = None
+    sessao_ativa = session_id in ultima_atividade
+    
+    if sessao_ativa:
+        ultimo_acesso = ultima_atividade[session_id]
+        tempo_inativo_segundos = (datetime.now() - ultimo_acesso).total_seconds()
+        tempo_inativo = int(tempo_inativo_segundos / 60)  # em minutos
+        
+        if num_mensagens > 0:
+            ultima_msg = conversas[session_id][-1]["timestamp"]
+    
+    return {
+        "session_id": session_id,
+        "ativa": sessao_ativa,
+        "num_mensagens": num_mensagens,
+        "tempo_inativo_minutos": tempo_inativo,
+        "timeout_minutos": TIMEOUT_SESSAO_MINUTOS,
+        "max_mensagens_contexto": MAX_MENSAGENS_CONTEXTO,
+        "contexto_sera_limitado": num_mensagens >= MAX_MENSAGENS_CONTEXTO,
+        "ultima_mensagem": ultima_msg
+    }
+
+@app.post("/api/sessao/renovar")
+async def renovar_sessao(current_user: User = Depends(get_current_active_user)):
+    """
+    Renova a sessão do usuário (atualiza timestamp de atividade).
+    """
+    session_id = f"user_{current_user.id}"
+    atualizar_atividade_sessao(session_id)
+    
+    return {
+        "mensagem": "Sessão renovada com sucesso",
+        "session_id": session_id,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/api/upload")
-async def upload_documentos(files: List[UploadFile] = File(...)):
-    """Faz upload de documentos para a base de conhecimento."""
+async def upload_documentos(
+    files: List[UploadFile] = File(...),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Faz upload de documentos para a base de conhecimento de forma INCREMENTAL.
+    Apenas processa arquivos novos ou modificados.
+    
+    Requer autenticação.
+    """
     if not assistente:
         raise HTTPException(status_code=503, detail="Assistente não inicializado")
     
     os.makedirs(DIRETORIO_DOCS, exist_ok=True)
     
     documentos_salvos = []
+    documentos_pulados = []
     
     for file in files:
         # Valida extensão
-        if not file.filename.endswith(('.pdf', '.docx', '.xlsx')):
+        if not file.filename.endswith(('.pdf', '.docx', '.xlsx', '.txt', '.md')):
             continue
         
         # Salva arquivo
         file_path = os.path.join(DIRETORIO_DOCS, file.filename)
+        
+        # Verifica se arquivo já existe e não foi modificado
+        if assistente.base_conhecimento.arquivo_ja_processado(file_path):
+            documentos_pulados.append({
+                "nome": file.filename,
+                "motivo": "Já processado anteriormente"
+            })
+            continue
         
         with open(file_path, "wb") as f:
             content = await file.read()
@@ -315,19 +540,199 @@ async def upload_documentos(files: List[UploadFile] = File(...)):
         documentos_salvos.append({
             "nome": file.filename,
             "tamanho": len(content),
-            "tipo": file.filename.split('.')[-1]
+            "tipo": file.filename.split('.')[-1],
+            "caminho": file_path
         })
     
-    # Recarrega documentos
+    # Processa APENAS os novos documentos
+    documentos_adicionados = 0
     if documentos_salvos:
-        global documentos_carregados
-        assistente.carregar_documentos(DIRETORIO_DOCS)
-        documentos_carregados = True  # Marca que documentos foram carregados
+        from src.knowledge_base.processador_documentos import ProcessadorDocumentos
+        processador = ProcessadorDocumentos()
+        
+        for doc_info in documentos_salvos:
+            try:
+                # Processa o documento
+                chunks = processador.processar_arquivo(doc_info["caminho"])
+                
+                # Adiciona incrementalmente (verifica hash internamente)
+                assistente.base_conhecimento.adicionar_documentos_incrementalmente(
+                    chunks,
+                    caminho_arquivo=doc_info["caminho"]
+                )
+                documentos_adicionados += 1
+                
+            except Exception as e:
+                print(f"❌ Erro ao processar {doc_info['nome']}: {e}")
+                doc_info["erro"] = str(e)
     
     return {
-        "mensagem": f"{len(documentos_salvos)} documento(s) processado(s)",
-        "documentos": documentos_salvos
+        "mensagem": f"{documentos_adicionados} novo(s) documento(s) processado(s)",
+        "novos": documentos_salvos,
+        "pulados": documentos_pulados,
+        "total_novos": len(documentos_salvos),
+        "total_pulados": len(documentos_pulados)
     }
+
+@app.post("/api/base/processar-diretorio")
+async def processar_diretorio_incremental(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Processa todos os documentos no diretório de forma INCREMENTAL.
+    Apenas adiciona arquivos novos ou modificados.
+    
+    Requer autenticação (apenas admins).
+    """
+    if not assistente:
+        raise HTTPException(status_code=503, detail="Assistente não inicializado")
+    
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Apenas administradores podem processar diretórios")
+    
+    if not os.path.exists(DIRETORIO_DOCS):
+        raise HTTPException(status_code=404, detail="Diretório de documentos não encontrado")
+    
+    from src.knowledge_base.processador_documentos import ProcessadorDocumentos
+    processador = ProcessadorDocumentos()
+    
+    arquivos_processados = []
+    arquivos_pulados = []
+    erros = []
+    
+    # Varre todos os arquivos no diretório
+    for root, dirs, files in os.walk(DIRETORIO_DOCS):
+        for file in files:
+            if file.endswith(('.pdf', '.docx', '.xlsx', '.txt', '.md')):
+                file_path = os.path.join(root, file)
+                
+                # Verifica se já foi processado
+                if assistente.base_conhecimento.arquivo_ja_processado(file_path):
+                    arquivos_pulados.append({
+                        "arquivo": file,
+                        "caminho": file_path
+                    })
+                    continue
+                
+                try:
+                    # Processa o arquivo
+                    chunks = processador.processar_arquivo(file_path)
+                    
+                    # Adiciona à base
+                    assistente.base_conhecimento.adicionar_documentos_incrementalmente(
+                        chunks,
+                        caminho_arquivo=file_path
+                    )
+                    
+                    arquivos_processados.append({
+                        "arquivo": file,
+                        "chunks": len(chunks),
+                        "caminho": file_path
+                    })
+                    
+                except Exception as e:
+                    print(f"❌ Erro ao processar {file}: {e}")
+                    erros.append({
+                        "arquivo": file,
+                        "erro": str(e)
+                    })
+    
+    return {
+        "mensagem": f"Processamento incremental concluído",
+        "novos_processados": len(arquivos_processados),
+        "pulados": len(arquivos_pulados),
+        "erros": len(erros),
+        "detalhes": {
+            "processados": arquivos_processados,
+            "pulados": arquivos_pulados,
+            "erros": erros
+        }
+    }
+
+@app.get("/api/base/estatisticas")
+async def obter_estatisticas_base(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Retorna estatísticas detalhadas da base de conhecimento.
+    
+    Requer autenticação.
+    """
+    if not assistente:
+        raise HTTPException(status_code=503, detail="Assistente não inicializado")
+    
+    stats = assistente.base_conhecimento.obter_estatisticas()
+    
+    return {
+        "total_chunks": stats["total_chunks"],
+        "total_arquivos": stats["total_arquivos"],
+        "arquivos": stats["arquivos"],
+        "ultima_atualizacao": max(
+            [a["data"] for a in stats["arquivos"]] + ["N/A"]
+        ) if stats["arquivos"] else "N/A"
+    }
+
+@app.delete("/api/base/limpar")
+async def limpar_base_conhecimento(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    LIMPA COMPLETAMENTE a base de conhecimento.
+    ⚠️ ATENÇÃO: Esta operação é irreversível!
+    
+    Requer autenticação de administrador.
+    """
+    if not assistente:
+        raise HTTPException(status_code=503, detail="Assistente não inicializado")
+    
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Apenas administradores podem limpar a base")
+    
+    try:
+        assistente.base_conhecimento.limpar_base()
+        
+        return {
+            "mensagem": "Base de conhecimento limpa com sucesso",
+            "aviso": "Todos os documentos foram removidos da base. Processe novamente para reconstruir."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao limpar base: {str(e)}")
+
+@app.delete("/api/base/arquivo/{nome_arquivo}")
+async def remover_arquivo_base(
+    nome_arquivo: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Remove um arquivo específico do controle da base de conhecimento.
+    
+    Requer autenticação de administrador.
+    """
+    if not assistente:
+        raise HTTPException(status_code=503, detail="Assistente não inicializado")
+    
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Apenas administradores podem remover arquivos")
+    
+    # Busca o arquivo no diretório
+    file_path = None
+    for root, dirs, files in os.walk(DIRETORIO_DOCS):
+        if nome_arquivo in files:
+            file_path = os.path.join(root, nome_arquivo)
+            break
+    
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+    
+    try:
+        assistente.base_conhecimento.remover_arquivo(file_path)
+        
+        return {
+            "mensagem": f"Arquivo '{nome_arquivo}' removido do controle",
+            "aviso": "Para remover completamente, limpe e reconstrua a base sem este arquivo"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao remover arquivo: {str(e)}")
 
 @app.get("/api/documentos")
 async def listar_documentos():

@@ -8,6 +8,10 @@ from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 from datetime import timedelta
 import os
+from dotenv import load_dotenv
+
+# Carrega variáveis de ambiente ANTES de usar os.getenv()
+load_dotenv()
 
 from src.database import get_db
 from src.auth import (

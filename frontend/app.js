@@ -146,6 +146,11 @@ function showPage(pageName) {
   if (page) {
     page.classList.add('active');
     currentPage = pageName;
+
+    // Carregar dados específicos da página
+    if (pageName === 'documents') {
+      loadBaseStats();
+    }
   }
 }
 
@@ -243,23 +248,49 @@ function animateNumbers() {
 
 // === CHAT ===
 function initializeChat() {
-  const saudacao = `Olá! 👋 Eu sou o **Assistente de Consultoria do Sebrae**, seu consultor especializado em inteligência artificial e análise de dados.
+  const saudacao = `👋 **Olá! Seja bem-vindo(a) ao Consultor Virtual do Sebrae!**
 
-🎯 **Minha missão:** Ajudar analistas do Sebrae com informações precisas sobre produtos, serviços, fichas técnicas (FT) e manuais de operacionalização (MOA).
+Seu assistente de inteligência artificial especializado em soluções para empreendedores e pequenos negócios.
 
-🔍 **Como funciono:**
-- **Prioridade total** para nossa base local de documentos Sebrae
-- Respostas rápidas e precisas baseadas em conhecimento oficial
-- Fallback inteligente para informações complementares quando necessário
+Estou aqui para ajudá-lo(a) a encontrar informações, produtos, serviços e profissionais qualificados do Sebrae.
 
-💡 **Posso ajudar com:**
-- Soluções e produtos do Sebrae
-- Fichas técnicas detalhadas
-- Contratação de consultores e instrutores
-- Estratégias para atendimento de demandas
-- Orientações sobre empreendedorismo
+---
 
-**Qual é sua pergunta hoje?** Estou pronto para ajudar! 🚀`;
+📋 **POR FAVOR, ESPECIFIQUE O TIPO DE CONSULTA QUE DESEJA FAZER:**
+
+**📚 PARA CONSULTAR BASE DE DOCUMENTOS SEBRAE (LOCAL), DIGITE: 1 + sua pergunta**
+
+✅ Busca em documentos oficiais do Sebrae
+✅ Produtos, serviços e soluções Sebrae
+✅ Fichas técnicas (FT) e manuais (MOA)
+✅ Indicação de consultores especializados por tema
+✅ Cursos, capacitações e treinamentos
+
+💡 **Recomendado para:**
+• Como abrir MEI, ME ou EPP
+• Programas e linhas de crédito Sebrae
+• Contratar consultores/instrutores
+• Informações sobre cursos específicos
+• Fichas técnicas de produtos Sebrae
+
+**💬 CONVERSA LIVRE COM INTELIGÊNCIA ARTIFICIAL, DIGITE: 2 + sua pergunta**
+
+✅ Resposta direta do modelo de IA (LLM)
+✅ Perguntas gerais sobre empreendedorismo
+✅ Dicas e orientações de negócios
+✅ Análise de ideias e estratégias
+✅ Respostas rápidas sem buscar na base local
+
+💡 **Recomendado para:**
+• Dicas gerais de marketing e vendas
+• Ideias para melhorar meu negócio
+• Estratégias de gestão e liderança
+• Brainstorming e validação de ideias
+• Orientações gerais sobre mercado
+
+...
+
+🎯 **Aguardando sua escolha, digite 1 para busca local ou 2 para conversa livre...**`;
 
   addMessageToChat('assistant', saudacao);
 }
@@ -672,49 +703,6 @@ function removeFile(index) {
   }
 }
 
-async function uploadFiles() {
-  if (selectedFiles.length === 0) {
-    showToast('Selecione arquivos para fazer upload', 'warning');
-    return;
-  }
-
-  const uploadButton = document.getElementById('upload-button');
-  uploadButton.disabled = true;
-  uploadButton.textContent = '⏳ Processando...';
-
-  try {
-    const formData = new FormData();
-    selectedFiles.forEach(file => {
-      formData.append('files', file);
-    });
-
-    const response = await fetch(`${API_BASE}/api/upload`, {
-      method: 'POST',
-      body: formData
-    });
-
-    const result = await response.json();
-
-    showToast(`${result.mensagem}`, 'success');
-
-    // Limpar seleção
-    selectedFiles = [];
-    document.getElementById('selected-files').innerHTML = '';
-    document.getElementById('file-input').value = '';
-    uploadButton.style.display = 'none';
-
-    // Recarregar documentos e métricas
-    await loadDocuments();
-    await loadMetrics();
-
-  } catch (error) {
-    showToast('Erro ao fazer upload dos documentos', 'error');
-  } finally {
-    uploadButton.disabled = false;
-    uploadButton.textContent = '🚀 Processar Documentos';
-  }
-}
-
 // === LISTA DE DOCUMENTOS ===
 async function loadDocuments() {
   try {
@@ -747,3 +735,245 @@ async function loadDocuments() {
     console.error('Erro ao carregar documentos:', error);
   }
 }
+
+// === GERENCIAMENTO DA BASE DE CONHECIMENTO ===
+
+// Carrega estatísticas da base
+async function loadBaseStats() {
+  try {
+    showToast('Carregando estatísticas...', 'info');
+
+    const stats = await apiCall('/api/base/estatisticas');
+
+    // Atualiza os valores
+    document.getElementById('stat-chunks').textContent = stats.total_chunks || '0';
+    document.getElementById('stat-files').textContent = stats.total_arquivos || '0';
+
+    // Formata data da última atualização
+    const lastUpdate = stats.ultima_atualizacao;
+    if (lastUpdate && lastUpdate !== 'N/A') {
+      const date = new Date(lastUpdate);
+      document.getElementById('stat-updated').textContent = date.toLocaleDateString('pt-BR');
+    } else {
+      document.getElementById('stat-updated').textContent = 'Nunca';
+    }
+
+    // Atualiza lista de arquivos processados
+    loadProcessedFiles(stats.arquivos || []);
+
+    showToast('Estatísticas atualizadas!', 'success');
+
+  } catch (error) {
+    console.error('Erro ao carregar estatísticas:', error);
+    showToast('Erro ao carregar estatísticas', 'error');
+
+    // Valores padrão em caso de erro
+    document.getElementById('stat-chunks').textContent = '-';
+    document.getElementById('stat-files').textContent = '-';
+    document.getElementById('stat-updated').textContent = '-';
+  }
+}
+
+// Carrega lista de arquivos processados
+function loadProcessedFiles(files) {
+  const container = document.getElementById('processed-files-list');
+
+  if (!files || files.length === 0) {
+    container.innerHTML = '<p class="text-muted">Nenhum arquivo processado ainda.</p>';
+    return;
+  }
+
+  container.innerHTML = '';
+
+  files.forEach(file => {
+    const fileName = file.caminho.split('/').pop();
+    const fileDate = file.data !== 'N/A' ? new Date(file.data).toLocaleString('pt-BR') : 'Data desconhecida';
+
+    const fileItem = document.createElement('div');
+    fileItem.className = 'document-item';
+    fileItem.innerHTML = `
+      <div class="document-info">
+        <div class="document-icon">${getFileIcon(fileName)}</div>
+        <div class="document-details">
+          <div class="document-name">${fileName}</div>
+          <div class="document-meta">
+            <span>🕐 ${fileDate}</span>
+            <span>📄 ${file.chunks} chunks</span>
+          </div>
+        </div>
+      </div>
+    `;
+    container.appendChild(fileItem);
+  });
+}
+
+// Processa diretório completo (atualização incremental)
+async function processarDiretorioCompleto() {
+  if (!confirm('Deseja processar todos os novos documentos do diretório?\n\nApenas arquivos novos ou modificados serão processados.')) {
+    return;
+  }
+
+  const logDiv = document.getElementById('processing-log');
+  const logContent = document.getElementById('log-content');
+
+  // Mostra log
+  logDiv.style.display = 'block';
+  logContent.innerHTML = '<div class="log-entry info">📋 Iniciando processamento incremental...</div>';
+
+  // Scroll para o log
+  logDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  try {
+    showToast('Processando diretório...', 'info');
+
+    const result = await apiCall('/api/base/processar-diretorio', {
+      method: 'POST'
+    });
+
+    // Adiciona logs de sucesso
+    logContent.innerHTML += `<div class="log-entry success">✅ ${result.mensagem}</div>`;
+    logContent.innerHTML += `<div class="log-entry info">📊 Novos processados: ${result.novos_processados}</div>`;
+    logContent.innerHTML += `<div class="log-entry warning">⏭️  Pulados: ${result.pulados}</div>`;
+
+    if (result.erros > 0) {
+      logContent.innerHTML += `<div class="log-entry error">❌ Erros: ${result.erros}</div>`;
+    }
+
+    // Mostra detalhes
+    if (result.detalhes && result.detalhes.processados) {
+      logContent.innerHTML += `<div class="log-entry info">\n📁 Arquivos processados:</div>`;
+      result.detalhes.processados.forEach(item => {
+        logContent.innerHTML += `<div class="log-entry success">  ✓ ${item.arquivo} (${item.chunks} chunks)</div>`;
+      });
+    }
+
+    if (result.detalhes && result.detalhes.erros && result.detalhes.erros.length > 0) {
+      logContent.innerHTML += `<div class="log-entry error">\n❌ Erros encontrados:</div>`;
+      result.detalhes.erros.forEach(item => {
+        logContent.innerHTML += `<div class="log-entry error">  ✗ ${item.arquivo}: ${item.erro}</div>`;
+      });
+    }
+
+    showToast(`${result.novos_processados} novos documentos processados!`, 'success');
+
+    // Atualiza estatísticas
+    await loadBaseStats();
+    await loadMetrics();
+
+  } catch (error) {
+    console.error('Erro ao processar diretório:', error);
+    logContent.innerHTML += `<div class="log-entry error">❌ Erro: ${error.message || 'Erro desconhecido'}</div>`;
+
+    if (error.message && error.message.includes('403')) {
+      showToast('Você precisa ser administrador para processar o diretório', 'error');
+    } else {
+      showToast('Erro ao processar diretório', 'error');
+    }
+  }
+}
+
+// Limpa base completa (com confirmação)
+async function limparBaseCompleta() {
+  if (!confirm('⚠️ ATENÇÃO: Esta ação irá APAGAR COMPLETAMENTE a base de conhecimento!\n\nTodos os documentos processados serão removidos e você precisará reprocessar tudo novamente.\n\nDeseja realmente continuar?')) {
+    return;
+  }
+
+  // Segunda confirmação
+  const confirmacao = prompt('Digite "CONFIRMAR" (em maiúsculas) para prosseguir:');
+
+  if (confirmacao !== 'CONFIRMAR') {
+    showToast('Operação cancelada', 'info');
+    return;
+  }
+
+  try {
+    showToast('Limpando base de conhecimento...', 'warning');
+
+    const result = await apiCall('/api/base/limpar', {
+      method: 'DELETE'
+    });
+
+    showToast('Base de conhecimento limpa com sucesso!', 'success');
+
+    // Atualiza interface
+    document.getElementById('stat-chunks').textContent = '0';
+    document.getElementById('stat-files').textContent = '0';
+    document.getElementById('stat-updated').textContent = 'Nunca';
+    document.getElementById('processed-files-list').innerHTML = '<p class="text-muted">Nenhum arquivo processado.</p>';
+
+    // Limpa log
+    const logDiv = document.getElementById('processing-log');
+    logDiv.style.display = 'none';
+
+    // Atualiza métricas
+    await loadMetrics();
+
+  } catch (error) {
+    console.error('Erro ao limpar base:', error);
+
+    if (error.message && error.message.includes('403')) {
+      showToast('Você precisa ser administrador para limpar a base', 'error');
+    } else {
+      showToast('Erro ao limpar base de conhecimento', 'error');
+    }
+  }
+}
+
+// Atualiza upload de arquivos para usar novo endpoint incremental
+async function uploadFiles() {
+  if (selectedFiles.length === 0) {
+    showToast('Selecione arquivos para fazer upload', 'warning');
+    return;
+  }
+
+  const uploadButton = document.getElementById('upload-button');
+  uploadButton.disabled = true;
+  uploadButton.textContent = '⏳ Processando...';
+
+  try {
+    const formData = new FormData();
+    selectedFiles.forEach(file => {
+      formData.append('files', file);
+    });
+
+    const response = await fetch(`${API_BASE}/api/upload`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    // Mostra resultado detalhado
+    let message = `${result.total_novos} novo(s) arquivo(s) adicionado(s)`;
+    if (result.total_pulados > 0) {
+      message += `, ${result.total_pulados} pulado(s) (já processados)`;
+    }
+
+    showToast(message, 'success');
+
+    // Limpar seleção
+    selectedFiles = [];
+    document.getElementById('selected-files').innerHTML = '';
+    document.getElementById('file-input').value = '';
+    uploadButton.style.display = 'none';
+
+    // Recarregar estatísticas
+    await loadBaseStats();
+    await loadMetrics();
+
+  } catch (error) {
+    console.error('Erro ao fazer upload:', error);
+    showToast('Erro ao fazer upload dos documentos', 'error');
+  } finally {
+    uploadButton.disabled = false;
+    uploadButton.textContent = '📤 Fazer Upload';
+  }
+}
+

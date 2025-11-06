@@ -1,4 +1,4 @@
-/Users/alexandrerocha/sebrae-ai-assistant/api_server.py:91: DeprecationWarning: 
+/Users/alexandrerocha/sebrae-ai-assistant/api_server.py:105: DeprecationWarning: 
         on_event is deprecated, use lifespan event handlers instead.
 
         Read more about it in the
@@ -6,7 +6,13 @@
         
   @app.on_event("startup")
 INFO:     Will watch for changes in these directories: ['/Users/alexandrerocha/sebrae-ai-assistant']
-ERROR:    [Errno 48] Address already in use
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [58779] using WatchFiles
+✅ Google OAuth configurado
+   Client ID: 503350985543-tadtui4...
 🚀 Iniciando Servidor API Sebrae...
 📍 URL: http://localhost:8000
 📚 Docs: http://localhost:8000/docs
+INFO:     Started server process [58854]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.

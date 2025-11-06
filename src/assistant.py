@@ -4,6 +4,8 @@ from .knowledge_base.processador_documentos import ProcessadorDocumentos
 from .knowledge_base.gerenciador_consultores import GerenciadorConsultores
 import openai
 import os
+import random
+from datetime import datetime
 
 # Configure a API Key do GitHub Copilot/OpenAI
 # É uma boa prática usar variáveis de ambiente para chaves de API
@@ -20,6 +22,9 @@ class AssistenteSebrae:
         """
         self.model_name = model_name
         self.client = openai.OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+        
+        # Histórico de conversação (últimas 3 perguntas e respostas)
+        self.historico_conversacao = []
         
         # PERSONA E MISSÃO PROFISSIONAL
         self.nome = "Consultor IA Sebrae"
@@ -44,6 +49,80 @@ class AssistenteSebrae:
         
         # Gerenciador de consultores especializados
         self.gerenciador_consultores = GerenciadorConsultores()
+    
+    def _adicionar_ao_historico(self, pergunta: str, resposta: str):
+        """
+        Adiciona uma interação ao histórico, mantendo apenas as últimas 3.
+        
+        Args:
+            pergunta: Pergunta do usuário
+            resposta: Resposta do assistente
+        """
+        self.historico_conversacao.append({
+            "pergunta": pergunta,
+            "resposta": resposta,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Mantém apenas as últimas 3 interações
+        if len(self.historico_conversacao) > 3:
+            self.historico_conversacao = self.historico_conversacao[-3:]
+    
+    def _obter_contexto_historico(self) -> str:
+        """
+        Retorna o histórico de conversação formatado para contexto do LLM.
+        
+        Returns:
+            String com o histórico formatado
+        """
+        if not self.historico_conversacao:
+            return ""
+        
+        contexto = "\n\n**Histórico recente da conversa:**\n"
+        for i, interacao in enumerate(self.historico_conversacao, 1):
+            contexto += f"\nInteração {i}:\n"
+            contexto += f"Usuário: {interacao['pergunta']}\n"
+            contexto += f"Assistente: {interacao['resposta'][:200]}...\n"  # Resumo
+        
+        return contexto
+    
+    def _apresentacao_inicial(self) -> Dict[str, any]:
+        """
+        Retorna a apresentação inicial do assistente.
+        
+        Returns:
+            Dict com mensagem de apresentação
+        """
+        hora_atual = datetime.now().hour
+        
+        if hora_atual < 12:
+            periodo = "Bom dia"
+        elif hora_atual < 18:
+            periodo = "Boa tarde"
+        else:
+            periodo = "Boa noite"
+        
+        return {
+            "resposta": f"""{periodo}! 👋
+
+Sou o **Consultor IA Sebrae**, seu assistente especializado em empreendedorismo e soluções para pequenos negócios.
+
+**Como posso ajudar você hoje?**
+
+💡 Posso auxiliar com:
+- Produtos e serviços do Sebrae
+- Como abrir MEI, ME ou EPP
+- Consultores especializados
+- Cursos e capacitações
+- Linhas de crédito e financiamento
+- Gestão empresarial
+
+**Faça sua pergunta e terei prazer em ajudar!** 😊""",
+            "fontes": [],
+            "consultores": [],
+            "tipo_resposta": "apresentacao",
+            "usou_base": False
+        }
         
     def carregar_documentos(self, diretorio_docs: str):
         """
@@ -103,17 +182,257 @@ class AssistenteSebrae:
         palavras_irrelevantes = {"como", "que", "qual", "onde", "quando", "por", "para", "um", "uma", "o", "a"}
         termos = [palavra.lower() for palavra in consulta.split() if palavra.lower() not in palavras_irrelevantes and len(palavra) > 2]
         return " ".join(termos)
+    
+    def classificar_intencao(self, consulta: str) -> Dict[str, any]:
+        """
+        Classifica a intenção da consulta do usuário para determinar se precisa
+        consultar a base de dados ou se é uma interação casual/saudação.
+        
+        Args:
+            consulta: Pergunta ou mensagem do usuário
+            
+        Returns:
+            Dict com tipo de intenção, confiança e se deve buscar na base
+        """
+        consulta_lower = consulta.lower().strip()
+        
+        # 1. SAUDAÇÕES (não busca base, não indica consultores)
+        saudacoes_exatas = [
+            'oi', 'olá', 'ola', 'oie', 'opa', 'ei', 'hey', 'opa',
+            'bom dia', 'boa tarde', 'boa noite', 'boa madrugada',
+            'tudo bem', 'tudo bom', 'como vai', 'como você está',
+            'e ai', 'e aí', 'beleza'
+        ]
+        
+        # Saudação exata ou seguida apenas de pontuação/espaços
+        for saudacao in saudacoes_exatas:
+            if consulta_lower == saudacao or \
+               consulta_lower.startswith(saudacao + ' ') or \
+               consulta_lower.startswith(saudacao + '!') or \
+               consulta_lower.startswith(saudacao + '?'):
+                return {
+                    'tipo': 'saudacao',
+                    'confianca': 1.0,
+                    'deve_buscar_base': False,
+                    'deve_indicar_consultores': False,
+                    'resposta_direta': self._responder_saudacao(consulta)
+                }
+        
+        # 2. PERGUNTAS CASUAIS/AGRADECIMENTOS (não busca base, não indica consultores)
+        padroes_casuais = [
+            ('quem é você', 'quem e voce', 'quem vc é', 'quem vc e'),
+            ('o que você faz', 'o que voce faz', 'o que vc faz'),
+            ('qual seu nome', 'qual é seu nome', 'qual e seu nome'),
+            ('como você se chama', 'como voce se chama'),
+            ('obrigado', 'obrigada', 'valeu', 'vlw', 'muito obrigado'),
+            ('tchau', 'até logo', 'ate logo', 'até mais', 'ate mais', 'falou'),
+            ('pode me ajudar', 'me ajuda', 'preciso de ajuda', 'ajuda ai', 'ajuda aí'),
+        ]
+        
+        for padroes in padroes_casuais:
+            for padrao in padroes if isinstance(padroes, tuple) else [padroes]:
+                if padrao in consulta_lower:
+                    return {
+                        'tipo': 'casual',
+                        'confianca': 0.95,
+                        'deve_buscar_base': False,
+                        'deve_indicar_consultores': False,
+                        'resposta_direta': self._responder_casual(consulta)
+                    }
+        
+        # 3. PALAVRAS-CHAVE QUE INDICAM CONSULTA À BASE (busca base + consultores)
+        palavras_base_conhecimento = [
+            # Sebrae e serviços
+            'sebrae', 'consultor', 'produto', 'serviço', 'servico', 'atendimento',
+            # Tipos de empresa
+            'mei', 'microempresa', 'micro empresa', 'pequena empresa', 'epp',
+            'empreendedor', 'empresário', 'empresario',
+            # Ações empresariais
+            'como abrir', 'como criar', 'como fazer', 'como funciona', 'como registrar',
+            'quero abrir', 'preciso abrir', 'vou abrir',
+            # Documentação
+            'documentação', 'documentacao', 'manual', 'ficha técnica', 'ficha tecnica',
+            'moa', 'ft', 'procedimento',
+            # Capacitação
+            'curso', 'capacitação', 'capacitacao', 'treinamento', 'formação', 'formacao',
+            'workshop', 'palestra', 'evento',
+            # Consultoria
+            'assessoria', 'consultoria', 'orientação', 'orientacao', 'ajuda especializada',
+            # Aspectos legais/formais
+            'cnpj', 'registro', 'alvará', 'alvara', 'licença', 'licenca',
+            'documentos', 'burocracia', 'legalização', 'legalizacao',
+            # Gestão empresarial
+            'plano de negócio', 'plano de negocios', 'marketing', 'vendas',
+            'financeiro', 'contabilidade', 'fiscal', 'tributário', 'tributario',
+            # Crédito e financiamento
+            'crédito', 'credito', 'empréstimo', 'emprestimo', 'financiamento',
+            'capital', 'investimento', 'linha de crédito',
+            # Inovação e tecnologia
+            'inovação', 'inovacao', 'tecnologia', 'digital', 'transformação digital',
+            'e-commerce', 'marketplace', 'redes sociais',
+            # Setores
+            'comércio', 'comercio', 'indústria', 'industria', 'serviços',
+            'agricultura', 'agronegócio', 'agronegocio',
+            # Gestão específica
+            'estoque', 'fluxo de caixa', 'precificação', 'precificacao',
+            'planejamento', 'estratégia', 'estrategia'
+        ]
+        
+        # Conta quantas palavras-chave relevantes foram encontradas
+        palavras_encontradas = sum(1 for palavra in palavras_base_conhecimento 
+                                   if palavra in consulta_lower)
+        
+        # Se encontrou palavras relevantes = consulta à base + consultores
+        if palavras_encontradas >= 1:
+            return {
+                'tipo': 'consulta_base',
+                'confianca': min(0.7 + (palavras_encontradas * 0.1), 1.0),
+                'deve_buscar_base': True,
+                'deve_indicar_consultores': True,
+                'palavras_encontradas': palavras_encontradas
+            }
+        
+        # 4. PERGUNTAS GENÉRICAS com interrogação (tenta buscar, mas sem consultores)
+        if '?' in consulta or any(palavra in consulta_lower for palavra in 
+                                   ['como', 'qual', 'quais', 'onde', 'quando', 'por que', 'porque']):
+            # Se a pergunta é muito curta (< 10 caracteres), provavelmente é casual
+            if len(consulta.strip()) < 10:
+                return {
+                    'tipo': 'casual',
+                    'confianca': 0.8,
+                    'deve_buscar_base': False,
+                    'deve_indicar_consultores': False,
+                    'resposta_direta': self._responder_casual(consulta)
+                }
+            
+            return {
+                'tipo': 'informacao_geral',
+                'confianca': 0.6,
+                'deve_buscar_base': True,
+                'deve_indicar_consultores': False,  # Pergunta genérica, sem consultores
+                'nota': 'Pergunta genérica - consultará base mas sem indicar consultores'
+            }
+        
+        # 5. PADRÃO (busca na base por segurança, sem consultores)
+        return {
+            'tipo': 'indefinido',
+            'confianca': 0.4,
+            'deve_buscar_base': True,
+            'deve_indicar_consultores': False,
+            'nota': 'Tipo indefinido - consultará base sem indicar consultores'
+        }
+    
+    def _responder_saudacao(self, consulta: str) -> str:
+        """Gera respostas personalizadas para saudações."""
+        hora_atual = datetime.now().hour
+        
+        # Define saudação apropriada baseada no horário
+        if hora_atual < 12:
+            periodo = "Bom dia"
+        elif hora_atual < 18:
+            periodo = "Boa tarde"
+        else:
+            periodo = "Boa noite"
+        
+        saudacoes = [
+            f"{periodo}! 👋 Sou o **Consultor IA Sebrae**, seu assistente especializado em empreendedorismo e soluções para pequenos negócios.",
+            f"{periodo}! 😊 Seja bem-vindo! Sou o **Consultor IA Sebrae** e estou aqui para ajudar você!",
+            f"{periodo}! Prazer em atendê-lo! Sou o **Consultor IA Sebrae**, especialista em soluções empresariais."
+        ]
+        
+        introducao = random.choice(saudacoes)
+        
+        return f"""{introducao}
+
+**Como posso te ajudar hoje?**
+
+💡 Posso auxiliar com informações sobre:
+- Produtos e serviços do Sebrae
+- Orientações para abrir MEI ou empresa
+- Consultores especializados
+- Cursos e capacitações
+- Financiamento e linhas de crédito
+- Gestão empresarial e muito mais!
+
+**Faça sua pergunta!** 🎯"""
+    
+    def _responder_casual(self, consulta: str) -> str:
+        """Gera respostas para perguntas casuais sobre o assistente."""
+        consulta_lower = consulta.lower()
+        
+        # Identifica o tipo de pergunta casual
+        if any(palavra in consulta_lower for palavra in ['quem', 'nome', 'você é', 'voce e', 'vc é', 'vc e']):
+            return """🤖 **Sobre mim:**
+
+**Nome:** Consultor IA Sebrae
+
+**Minha função:**
+Sou um assistente inteligente especializado em ajudar analistas e empreendedores com informações do Sebrae.
+
+**O que posso fazer:**
+✅ Buscar informações em documentos oficiais do Sebrae
+✅ Recomendar consultores especializados por área
+✅ Explicar produtos, serviços e processos
+✅ Orientar sobre MEI, microempresas e pequenos negócios
+✅ Fornecer informações sobre cursos e capacitações
+
+**Faça sua pergunta e vou buscar as melhores informações para você!** 😊"""
+        
+        if any(palavra in consulta_lower for palavra in ['obrigad', 'valeu', 'vlw']):
+            return """De nada! 😊 Fico feliz em ajudar!
+
+Se tiver mais dúvidas sobre o Sebrae, produtos, serviços ou consultores, **é só chamar!** 👋"""
+        
+        if any(palavra in consulta_lower for palavra in ['tchau', 'até logo', 'ate logo', 'até mais', 'ate mais', 'falou']):
+            return """Até logo! 👋 
+
+Estarei aqui sempre que precisar de informações do Sebrae. **Bom trabalho!** 🚀"""
+        
+        if any(palavra in consulta_lower for palavra in ['ajuda', 'ajudar', 'pode me', 'consegue']):
+            return """📚 **Claro! Posso te ajudar sim!**
+
+**Exemplos de perguntas que posso responder:**
+
+🏢 **Sobre empresas:**
+- "Como abrir uma MEI?"
+- "Qual a diferença entre MEI e ME?"
+- "Documentos necessários para abrir empresa"
+
+📊 **Produtos e serviços:**
+- "Quais produtos o Sebrae oferece?"
+- "Como funciona o Sebrae Mais?"
+- "Cursos disponíveis para empreendedores"
+
+👨‍💼 **Consultores:**
+- "Preciso de consultor em marketing digital"
+- "Consultores especializados em finanças"
+- "Quem pode me ajudar com redes sociais?"
+
+💰 **Financiamento:**
+- "Linhas de crédito para pequenas empresas"
+- "Como obter financiamento pelo Sebrae?"
+
+**Digite sua pergunta e eu busco as informações!** 🎯"""
+        
+        # Resposta genérica para outras perguntas casuais
+        return """Olá! 😊 Estou aqui para ajudar com informações do Sebrae.
+
+**Pode me perguntar sobre:**
+- Produtos e serviços
+- Como abrir empresas (MEI, ME, EPP)
+- Consultores especializados
+- Cursos e capacitações
+- Financiamento e crédito
+
+**Como posso te ajudar?** 💡"""
         
     def processar_consulta(self, consulta: str) -> Dict[str, Optional[str]]:
         """
-        Processa consultas seguindo metodologia Chain of Thought profissional:
-        1. Análise da pergunta
-        2. Busca prioritária na base interna
-        3. Busca ampla como fallback
-        4. Resposta estruturada com transparência de fonte
-
+        Processa consultas de forma conversacional e inteligente.
+        O assistente decide automaticamente se deve buscar na base de dados ou responder diretamente.
+        
         Args:
-            consulta: A pergunta ou pedido do usuário
+            consulta: A pergunta ou mensagem do usuário
 
         Returns:
             Dict[str, Optional[str]]: Resposta contendo texto, fontes e metadados
@@ -126,13 +445,70 @@ class AssistenteSebrae:
                 "raciocinio": "Erro de configuração"
             }
 
+        consulta_limpa = consulta.strip()
+        
+        # Se consulta vazia, apresenta o assistente
+        if not consulta_limpa:
+            return self._apresentacao_inicial()
+        
+        # Classifica a intenção da consulta
+        classificacao = self.classificar_intencao(consulta_limpa)
+        
+        # SAUDAÇÕES - responde diretamente
+        if classificacao['tipo'] == 'saudacao':
+            resposta = classificacao.get('resposta_direta', self._responder_saudacao(consulta_limpa))
+            self._adicionar_ao_historico(consulta_limpa, resposta)
+            return {
+                "resposta": resposta,
+                "fontes": [],
+                "consultores": [],
+                "tipo_resposta": "saudacao",
+                "usou_base": False
+            }
+        
+        # PERGUNTAS CASUAIS - responde diretamente
+        if classificacao['tipo'] == 'casual':
+            resposta = classificacao.get('resposta_direta', self._responder_casual(consulta_limpa))
+            self._adicionar_ao_historico(consulta_limpa, resposta)
+            return {
+                "resposta": resposta,
+                "fontes": [],
+                "consultores": [],
+                "tipo_resposta": "casual",
+                "usou_base": False
+            }
+        
+        # CONSULTAS À BASE - busca documentos + consultores
+        if classificacao['deve_buscar_base']:
+            resultado = self._processar_consulta_base_dados(consulta_limpa)
+            self._adicionar_ao_historico(consulta_limpa, resultado.get('resposta', ''))
+            return resultado
+        
+        # FALLBACK - resposta geral do LLM
+        resultado = self._processar_consulta_llm_livre(consulta_limpa)
+        self._adicionar_ao_historico(consulta_limpa, resultado.get('resposta', ''))
+        return resultado
+    
+    def _processar_consulta_base_dados(self, consulta: str) -> Dict[str, Optional[str]]:
+        """
+        Processa consulta buscando na base de dados Sebrae e indicando consultores.
+        
+        Args:
+            consulta: Pergunta do usuário
+            
+        Returns:
+            Dict com resposta, fontes, consultores e metadados
+        """
+        print(f"📚 Buscando na base local Sebrae: '{consulta}'")
+        
         # PASSO 1: Análise Chain of Thought da consulta
         analise = self._analisar_consulta(consulta)
         
         # PASSO 2: Busca prioritária na base interna (Regra de Ouro)
         resultados = self.base_conhecimento.buscar(analise["termos_busca"], num_resultados=8)
         
-        # PASSO 3: Busca consultores especializados relacionados
+        # PASSO 3: Busca consultores especializados
+        print("👨‍💼 Buscando consultores relacionados...")
         consultores_encontrados = self._buscar_consultores_relacionados(consulta, analise)
         
         if resultados:
@@ -166,7 +542,86 @@ class AssistenteSebrae:
         if consultores_encontrados:
             resposta_final["consultores"] = consultores_encontrados
         
+        # Marca que usou a base de dados
+        resposta_final["modo_consulta"] = "base_dados"
+        resposta_final["usou_base"] = True
+        
         return resposta_final
+    
+    def _processar_consulta_llm_livre(self, consulta: str) -> Dict[str, Optional[str]]:
+        """
+        Processa consulta usando o LLM com contexto do histórico de conversação.
+        Responde como assistente de IA especializado em empreendedorismo.
+        
+        Args:
+            consulta: Pergunta do usuário
+            
+        Returns:
+            Dict com resposta do LLM e metadados
+        """
+        print(f"💬 Respondendo com IA: '{consulta}'")
+        
+        try:
+            # Contexto do histórico
+            contexto_historico = self._obter_contexto_historico()
+            
+            # Prompt para o LLM com contexto de empreendedorismo
+            prompt_sistema = f"""Você é o Consultor IA Sebrae, um assistente especializado em empreendedorismo e pequenos negócios.
+
+Seu papel é ajudar empreendedores com:
+- Dicas práticas de gestão empresarial
+- Orientações sobre marketing e vendas
+- Estratégias de negócios
+- Análise de ideias e oportunidades
+- Informações gerais sobre empreendedorismo
+
+Características da sua resposta:
+- Seja didático e prático
+- Use exemplos concretos quando possível
+- Tom profissional mas acessível e amigável
+- Forneça informações úteis e acionáveis
+- Se a pergunta for sobre produtos/serviços específicos do Sebrae, mencione que você tem acesso à base oficial do Sebrae
+
+{contexto_historico}
+
+Responda à pergunta do usuário de forma completa, útil e considerando o contexto da conversa anterior (se houver)."""
+
+            # Chama o modelo LLM
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": prompt_sistema},
+                    {"role": "user", "content": consulta}
+                ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+            
+            resposta_llm = response.choices[0].message.content
+            
+            return {
+                "resposta": resposta_llm,
+                "fontes": [],
+                "consultores": [],
+                "palavras_chave": [],
+                "modo_consulta": "llm_livre",
+                "usou_base": False,
+                "raciocinio": "Resposta gerada pelo modelo de IA com contexto do histórico"
+            }
+            
+        except Exception as e:
+            print(f"❌ Erro ao processar com LLM: {str(e)}")
+            return {
+                "resposta": f"""Desculpe, ocorreu um erro ao processar sua pergunta no modo de conversa livre.
+
+**Erro:** {str(e)}
+
+**Sugestão:** Tente reformular sua pergunta ou use o modo 1 para consultar a base Sebrae:
+`1 {consulta}`""",
+                "fontes": [],
+                "consultores": [],
+                "erro": str(e)
+            }
     
     def _buscar_consultores_relacionados(self, consulta: str, analise: Dict) -> List[Dict]:
         """

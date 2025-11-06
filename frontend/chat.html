@@ -153,14 +153,51 @@
           </div>
 
           <div class="documents-container">
+            <!-- Estatísticas da Base -->
+            <section class="base-stats-section">
+              <div class="stats-header">
+                <h2>📊 Estatísticas da Base de Conhecimento</h2>
+                <button class="btn btn-outline" onclick="loadBaseStats()">
+                  🔄 Atualizar
+                </button>
+              </div>
+
+              <div class="stats-grid">
+                <div class="stat-box">
+                  <div class="stat-icon">📄</div>
+                  <div class="stat-content">
+                    <div id="stat-chunks" class="stat-value">-</div>
+                    <div class="stat-label">Total de Chunks</div>
+                  </div>
+                </div>
+
+                <div class="stat-box">
+                  <div class="stat-icon">📁</div>
+                  <div class="stat-content">
+                    <div id="stat-files" class="stat-value">-</div>
+                    <div class="stat-label">Arquivos Processados</div>
+                  </div>
+                </div>
+
+                <div class="stat-box">
+                  <div class="stat-icon">🕐</div>
+                  <div class="stat-content">
+                    <div id="stat-updated" class="stat-value">-</div>
+                    <div class="stat-label">Última Atualização</div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Upload Section -->
             <section class="upload-section">
               <h2>📤 Adicionar Novos Documentos</h2>
 
               <div class="upload-area" id="upload-area">
                 <div class="upload-icon">📁</div>
                 <p class="upload-text">Arraste arquivos aqui ou clique para selecionar</p>
-                <p class="upload-hint">Suporte para PDF, DOCX, XLSX</p>
-                <input type="file" id="file-input" multiple accept=".pdf,.docx,.xlsx" hidden>
+                <p class="upload-hint">Suporte para PDF, DOCX, XLSX, TXT, MD</p>
+                <input type="file" id="file-input" multiple accept=".pdf,.docx,.xlsx,.txt,.md" hidden>
                 <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
                   Selecionar Arquivos
                 </button>
@@ -169,14 +206,51 @@
               <div id="selected-files" class="selected-files"></div>
 
               <button id="upload-button" class="btn btn-success" onclick="uploadFiles()" style="display: none;">
-                🚀 Processar Documentos
+                � Fazer Upload
               </button>
             </section>
 
+            <!-- Gerenciamento da Base -->
+            <section class="base-management-section">
+              <div class="management-header">
+                <h2>🔧 Gerenciar Base de Dados</h2>
+                <div class="management-actions">
+                  <button class="btn btn-primary" onclick="processarDiretorioCompleto()">
+                    🔄 Atualizar Base (Processar Novos)
+                  </button>
+                  <button class="btn btn-outline" onclick="limparBaseCompleta()">
+                    🗑️ Limpar Base Completa
+                  </button>
+                </div>
+              </div>
+
+              <div class="info-box info-box-blue">
+                <div class="info-icon">💡</div>
+                <div class="info-content">
+                  <strong>Como funciona:</strong>
+                  <ul>
+                    <li>✅ <strong>Upload de Arquivos:</strong> Adicione novos documentos usando o formulário acima</li>
+                    <li>🔄 <strong>Atualizar Base:</strong> Processa apenas arquivos novos ou modificados (incremental)
+                    </li>
+                    <li>⚡ <strong>Inteligente:</strong> Sistema detecta automaticamente quais arquivos já foram
+                      processados</li>
+                    <li>�️ <strong>Limpar Base:</strong> Remove todos os documentos processados (requer confirmação)
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div id="processing-log" class="processing-log" style="display: none;">
+                <h3>📋 Log de Processamento</h3>
+                <div id="log-content" class="log-content"></div>
+              </div>
+            </section>
+
+            <!-- Lista de Documentos -->
             <section class="documents-list-section">
-              <h2>📚 Documentos Carregados</h2>
-              <div id="documents-list" class="documents-list">
-                <!-- Documents will be listed here -->
+              <h2>📚 Arquivos Processados na Base</h2>
+              <div id="processed-files-list" class="documents-list">
+                <p class="text-muted">Carregando...</p>
               </div>
             </section>
           </div>

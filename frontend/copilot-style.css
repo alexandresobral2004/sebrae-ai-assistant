@@ -657,9 +657,308 @@ body {
 .text-center { text-align: center; }
 .text-primary { color: var(--copilot-primary); }
 .text-secondary { color: var(--text-secondary); }
+.text-muted { color: var(--text-tertiary); font-style: italic; }
 .mb-sm { margin-bottom: var(--space-sm); }
 .mb-md { margin-bottom: var(--space-md); }
 .mb-lg { margin-bottom: var(--space-lg); }
 .mt-sm { margin-top: var(--space-sm); }
 .mt-md { margin-top: var(--space-md); }
 .mt-lg { margin-top: var(--space-lg); }
+
+/* === GERENCIAMENTO DE BASE === */
+
+/* Estatísticas da Base */
+.base-stats-section {
+    margin-bottom: var(--space-xl);
+}
+
+.stats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-lg);
+}
+
+.stats-header h2 {
+    margin: 0;
+    font-size: var(--font-size-xl);
+    color: var(--text-primary);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--space-lg);
+}
+
+.stat-box {
+    background: var(--surface-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    transition: all 0.2s ease;
+}
+
+.stat-box:hover {
+    border-color: var(--copilot-primary);
+    box-shadow: 0 4px 12px rgba(15, 108, 189, 0.1);
+    transform: translateY(-2px);
+}
+
+.stat-icon {
+    font-size: 2.5rem;
+    line-height: 1;
+}
+
+.stat-content {
+    flex: 1;
+}
+
+.stat-value {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    color: var(--copilot-primary);
+    margin-bottom: 0.25rem;
+}
+
+.stat-label {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* Gerenciamento da Base */
+.base-management-section {
+    background: var(--surface-secondary);
+    border-radius: var(--radius-lg);
+    padding: var(--space-xl);
+    margin-bottom: var(--space-xl);
+}
+
+.management-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-lg);
+    flex-wrap: wrap;
+    gap: var(--space-md);
+}
+
+.management-header h2 {
+    margin: 0;
+    font-size: var(--font-size-xl);
+    color: var(--text-primary);
+}
+
+.management-actions {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+/* Info Box */
+.info-box {
+    background: var(--surface-primary);
+    border-left: 4px solid var(--copilot-primary);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
+    display: flex;
+    gap: var(--space-md);
+    margin-bottom: var(--space-lg);
+}
+
+.info-box-blue {
+    border-left-color: var(--copilot-primary);
+    background: rgba(15, 108, 189, 0.05);
+}
+
+.info-box-warning {
+    border-left-color: var(--copilot-warning);
+    background: rgba(247, 99, 12, 0.05);
+}
+
+.info-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.info-content {
+    flex: 1;
+}
+
+.info-content strong {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.info-content ul {
+    margin: 0.5rem 0 0 0;
+    padding-left: 1.25rem;
+}
+
+.info-content li {
+    margin: 0.5rem 0;
+    color: var(--text-secondary);
+}
+
+/* Log de Processamento */
+.processing-log {
+    background: var(--surface-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
+    margin-top: var(--space-lg);
+}
+
+.processing-log h3 {
+    margin: 0 0 var(--space-md) 0;
+    font-size: var(--font-size-lg);
+    color: var(--text-primary);
+}
+
+.log-content {
+    background: #1E1E1E;
+    color: #D4D4D4;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: var(--font-size-sm);
+    padding: var(--space-md);
+    border-radius: var(--radius-sm);
+    max-height: 300px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.log-entry {
+    margin: 0.25rem 0;
+    padding: 0.25rem 0;
+}
+
+.log-entry.success {
+    color: #4EC9B0;
+}
+
+.log-entry.error {
+    color: #F48771;
+}
+
+.log-entry.warning {
+    color: #DCDCAA;
+}
+
+.log-entry.info {
+    color: #9CDCFE;
+}
+
+/* Lista de Arquivos Processados */
+.documents-list-section {
+    margin-top: var(--space-xl);
+}
+
+.documents-list-section h2 {
+    margin-bottom: var(--space-lg);
+    font-size: var(--font-size-xl);
+    color: var(--text-primary);
+}
+
+.documents-list {
+    display: grid;
+    gap: var(--space-md);
+}
+
+.document-item {
+    background: var(--surface-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.2s ease;
+}
+
+.document-item:hover {
+    border-color: var(--copilot-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.document-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex: 1;
+}
+
+.document-icon {
+    font-size: 2rem;
+    line-height: 1;
+}
+
+.document-details {
+    flex: 1;
+}
+
+.document-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.document-meta {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    display: flex;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.document-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.document-actions {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+/* Upload Section Enhancements */
+.upload-section {
+    margin-bottom: var(--space-xl);
+}
+
+.upload-section h2 {
+    margin-bottom: var(--space-lg);
+    font-size: var(--font-size-xl);
+    color: var(--text-primary);
+}
+
+/* Responsive - Gerenciamento */
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .management-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .management-actions {
+        width: 100%;
+    }
+    
+    .management-actions .btn {
+        flex: 1;
+    }
+    
+    .info-box {
+        flex-direction: column;
+    }
+}
+
