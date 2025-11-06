@@ -11,3 +11,6 @@ __pycache__/
 # Arquivos de dados gerados pela aplicação
 documentos_processados.json
 historico_conversas.json
+
+/dados/documentos/
+/local/

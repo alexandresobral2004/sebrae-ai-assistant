@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Assistente IA Sebrae - Consultor inteligente para empreendedorismo brasileiro">
+    <meta name="keywords" content="Sebrae, IA, Consultoria, Empreendedorismo, Gestão">
+    <meta name="author" content="Sebrae">
+
+    <title>Consultor IA Sebrae | Inteligência para o Empreendedorismo</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚀</text></svg>">
+
+    <!-- Design Tokens (Figma Integration) -->
+    <link rel="stylesheet" href="/static/design-tokens.css">
+
+    <!-- Copilot Style -->
+    <link rel="stylesheet" href="/static/copilot-style.css">
+
+    <!-- CSS (fallback para estilos antigos) -->
+    <!-- <link rel="stylesheet" href="/static/styles.css"> --> <!-- Fontes -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Fallback para Segoe UI-like font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  </head>
+
+  <body>
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+      <div class="loading-spinner"></div>
+      <p>Inicializando Assistente IA...</p>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+      <div class="container header-content">
+        <div class="logo-section">
+          <span class="logo-icon">🚀</span>
+          <div>
+            <h1 class="logo-title">Consultor IA Sebrae</h1>
+            <p class="logo-subtitle">Inteligência para o Empreendedorismo Brasileiro</p>
+          </div>
+        </div>
+
+        <div class="header-status">
+          <div id="user-info" style="display: flex; align-items: center; gap: 12px; margin-right: 20px;">
+            <img id="user-avatar" src="" alt="Avatar"
+              style="width: 32px; height: 32px; border-radius: 50%; display: none;">
+            <span id="user-name" style="font-size: 14px; font-weight: 500;"></span>
+            <button id="logout-btn" class="btn-outline" style="padding: 6px 12px; font-size: 13px;">Sair</button>
+          </div>
+          <div id="status-indicator" class="status-indicator">
+            <span class="status-dot"></span>
+            <span id="status-text">Inicializando...</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-container">
+      <div class="container">
+        <!-- Dashboard/Home Page -->
+        <div id="home-page" class="page active">
+          <!-- Metrics Section -->
+          <section class="metrics-section">
+            <div class="metric-card">
+              <div class="metric-icon">📚</div>
+              <div class="metric-content">
+                <div id="metric-docs" class="metric-number">0</div>
+                <div class="metric-label">Documentos</div>
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-icon">👥</div>
+              <div class="metric-content">
+                <div id="metric-consultores" class="metric-number">0</div>
+                <div class="metric-label">Consultores</div>
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-icon">💬</div>
+              <div class="metric-content">
+                <div id="metric-consultas" class="metric-number">0</div>
+                <div class="metric-label">Consultas Hoje</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Feature Cards -->
+          <section class="features-section">
+            <div class="feature-card feature-card-blue" onclick="showPage('chat')">
+              <div class="feature-icon">🤖</div>
+              <h3 class="feature-title">Consultor IA</h3>
+              <p class="feature-description">
+                Converse com a IA especialista em Sebrae. Busca prioritária na base local
+                com fallback inteligente para informações atualizadas.
+              </p>
+              <button class="btn btn-primary">Iniciar Consulta</button>
+            </div>
+
+            <div class="feature-card feature-card-orange" onclick="showPage('documents')">
+              <div class="feature-icon">📂</div>
+              <h3 class="feature-title">Gerenciar Documentos</h3>
+              <p class="feature-description">
+                Adicione novos documentos à base de conhecimento local. Suporte para PDF,
+                DOCX e XLSX com processamento automático.
+              </p>
+              <button class="btn btn-secondary">Gerenciar Arquivos</button>
+            </div>
+          </section>
+        </div>
+
+        <!-- Chat Page -->
+        <div id="chat-page" class="page">
+          <div class="page-header">
+            <button class="btn btn-back" onclick="showPage('home')">
+              ← Voltar ao Início
+            </button>
+            <button class="btn btn-outline" onclick="clearChat()">
+              🔄 Nova Conversa
+            </button>
+          </div>
+
+          <div class="chat-container">
+            <div id="chat-messages" class="chat-messages">
+              <!-- Messages will be inserted here -->
+            </div>
+
+            <div class="chat-input-container">
+              <textarea id="chat-input" class="chat-input"
+                placeholder="Digite sua pergunta sobre empreendedorismo, gestão ou produtos Sebrae..."
+                rows="3"></textarea>
+              <button id="send-button" class="btn btn-send" onclick="sendMessage()">
+                Enviar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Documents Page -->
+        <div id="documents-page" class="page">
+          <div class="page-header">
+            <button class="btn btn-back" onclick="showPage('home')">
+              ← Voltar ao Início
+            </button>
+          </div>
+
+          <div class="documents-container">
+            <section class="upload-section">
+              <h2>📤 Adicionar Novos Documentos</h2>
+
+              <div class="upload-area" id="upload-area">
+                <div class="upload-icon">📁</div>
+                <p class="upload-text">Arraste arquivos aqui ou clique para selecionar</p>
+                <p class="upload-hint">Suporte para PDF, DOCX, XLSX</p>
+                <input type="file" id="file-input" multiple accept=".pdf,.docx,.xlsx" hidden>
+                <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
+                  Selecionar Arquivos
+                </button>
+              </div>
+
+              <div id="selected-files" class="selected-files"></div>
+
+              <button id="upload-button" class="btn btn-success" onclick="uploadFiles()" style="display: none;">
+                🚀 Processar Documentos
+              </button>
+            </section>
+
+            <section class="documents-list-section">
+              <h2>📚 Documentos Carregados</h2>
+              <div id="documents-list" class="documents-list">
+                <!-- Documents will be listed here -->
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="container footer-content">
+        <p>&copy; 2025 Sebrae - Sistema de Apoio às Micro e Pequenas Empresas</p>
+        <p>🔒 Dados protegidos | 🌐 <a href="https://www.sebrae.com.br" target="_blank">www.sebrae.com.br</a></p>
+      </div>
+    </footer>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- JavaScript -->
+    <script src="/static/app.js"></script>
+  </body>
+
+</html>

@@ -62,6 +62,13 @@ O **Consultor IA Sebrae** é um sistema completo de inteligência artificial que
 - **Sidebar Informativa**: Estatísticas e documentos disponíveis
 - **Responsividade**: Otimizado para desktop e mobile
 
+### 5. 📝 **SISTEMA DE PROMPTS MARKDOWN**
+
+- **Templates Reutilizáveis**: Prompts estruturados em arquivos `.md`
+- **Variáveis Dinâmicas**: Sistema `{{variavel}}` para personalização
+- **Biblioteca de Templates**: Análise de viabilidade, marketing, validação
+- **Integração Completa**: Funciona com qualquer sistema de IA
+
 ---
 
 ## 🏗️ **ARQUITETURA TÉCNICA**
@@ -92,6 +99,11 @@ sebrae-ai-assistant/
 │       ├── [50+ PDFs e DOCs oficiais]
 │       └── Consultores/
 │           └── [209 planilhas Excel]
+├── 📝 prompts/                         # Templates de prompts
+│   ├── exemplo_prompt.md               # Análise de empreendimento
+│   ├── analise_concorrencia.md         # Análise competitiva
+│   ├── plano_marketing_digital.md      # Marketing digital
+│   └── validacao_ideia_negocio.md      # Validação de ideias
 ├── ⚙️ .chromadb/                       # Base vetorial
 ├── 📋 requirements.txt                 # Dependências
 └── 🔧 .env                            # Configurações

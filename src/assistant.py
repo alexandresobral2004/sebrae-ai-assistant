@@ -239,11 +239,32 @@ TOM DE COMUNICAÇÃO:
 - PROFISSIONAL: Use linguagem clara, objetiva e encorajadora  
 - ANALÍTICO: Demonstre expertise em IA e dados quando relevante
 
-DIRETRIZES DE RESPOSTA:
-1. TRANSPARÊNCIA DE FONTE: Seja explícito que está usando documentos oficiais Sebrae
-2. EXPERTISE EM IA: Quando relevante, adicione insights sobre IA/dados
-3. AÇÃO PRÁTICA: Finalize com recomendação ou próximo passo
-4. FOCO EM PRODUTOS/SERVIÇOS: Destaque FTs, MOAs e oportunidades de consultoria"""
+ESTRUTURA OBRIGATÓRIA DA RESPOSTA (SIGA ESTA ORDEM):
+
+1. APRESENTAÇÃO E MISSÃO:
+   - Inicie se apresentando como Consultor IA Sebrae
+   - Reforce brevemente sua missão de ajudar os analistas
+
+2. RESPOSTA À PERGUNTA:
+   - Responda objetivamente à pergunta do usuário
+   - Use informações dos documentos oficiais Sebrae encontrados
+   - Seja claro, didático e completo
+   - Cite especificamente as Fichas Técnicas (FTs) e MOAs quando aplicável
+
+3. CONSULTORES ESPECIALIZADOS:
+   - Esta seção será adicionada automaticamente pelo sistema
+   - NÃO mencione consultores na sua resposta
+   - O sistema incluirá automaticamente os consultores relacionados ao tema
+
+4. DOCUMENTOS CONSULTADOS:
+   - Esta seção será adicionada automaticamente pelo sistema
+   - NÃO liste os documentos na sua resposta
+   - O sistema incluirá automaticamente a lista de fontes com links
+
+IMPORTANTE:
+- Concentre-se APENAS nas seções 1 e 2
+- NÃO crie seções de consultores ou documentos
+- Seja objetivo e prático"""
                     },
                     {
                         "role": "user",
@@ -255,12 +276,12 @@ CONTEXTO DOS DOCUMENTOS OFICIAIS SEBRAE:
 PERGUNTA DO ANALISTA: "{consulta}"
 
 INSTRUÇÕES ESPECÍFICAS:
-- Inicie mencionando que encontrou informações em documentos oficiais Sebrae
-- Use informações de TODOS os documentos relevantes  
-- Cite especificamente as Fichas Técnicas (FTs) e MOAs encontrados
-- Combine informações complementares
-- Destaque oportunidades para contratação de consultores/instrutores
-- Finalize com recomendação prática
+- Inicie com apresentação como Consultor IA Sebrae e sua missão
+- Responda à pergunta de forma objetiva e completa
+- Use informações de TODOS os documentos relevantes
+- Cite as FTs e MOAs encontrados
+- NÃO mencione consultores (será adicionado automaticamente)
+- NÃO liste documentos (será adicionado automaticamente)
 
 RESPOSTA PROFISSIONAL:"""
                     }
@@ -458,41 +479,53 @@ Responda baseado nas informações disponíveis, indicando quais documentos cons
         raciocinio = resultado.get("raciocinio", "")
         consultores = resultado.get("consultores", [])
         
-        # Adiciona raciocínio Chain of Thought se disponível
-        if raciocinio:
-            resposta = f"💭 **Análise:** {raciocinio}\n\n{resposta}"
-        
-        # Adiciona seção de fontes se houver documentos consultados
-        if fontes:
-            resposta += "\n\n---\n"
-            resposta += "📚 **Fontes consultadas:**\n"
-            for i, fonte in enumerate(sorted(fontes), 1):
-                resposta += f"{i}. {fonte}\n"
-        
-        # Adiciona seção de consultores especializados se encontrados
+        # SEÇÃO 3: CONSULTORES ESPECIALIZADOS
+        # Adiciona APENAS consultores relacionados ao tema buscado
         if consultores:
             resposta += "\n\n---\n"
-            resposta += "👥 **CONSULTORES ESPECIALIZADOS DISPONÍVEIS:**\n\n"
+            resposta += "## 👥 CONSULTORES ESPECIALIZADOS NO TEMA\n\n"
+            resposta += "Com base no tema da sua consulta, identifiquei os seguintes consultores especializados:\n\n"
             
             for i, consultor in enumerate(consultores, 1):
                 consultor_formatado = self.gerenciador_consultores.formatar_consultor(consultor)
                 resposta += f"**Consultor {i}:**\n{consultor_formatado}\n\n"
             
-            resposta += "💼 *Para contratar estes consultores, entre em contato diretamente através dos dados informados acima.*"
+            resposta += "💼 *Para contratar estes consultores, entre em contato diretamente através dos dados informados acima.*\n"
         
-        # Adiciona transparência sobre estratégia utilizada
-        if estrategia == "base_interna_oficial":
-            resposta += "\n� *Resposta baseada em documentos oficiais Sebrae*"
-        elif estrategia == "busca_ampla_com_resultados_parciais":
-            resposta += "\n🔍 *Resposta baseada em busca ampla - informações parciais*"
-        elif estrategia == "nenhuma_informacao_encontrada":
-            resposta += "\n❓ *Informação não encontrada na base de conhecimento oficial*"
+        # SEÇÃO 4: DOCUMENTOS CONSULTADOS E LINKS
+        # Lista os documentos oficiais consultados com links para download
+        if fontes:
+            resposta += "\n\n---\n"
+            resposta += "## � DOCUMENTOS CONSULTADOS\n\n"
+            resposta += "As informações fornecidas foram extraídas dos seguintes documentos oficiais do Sebrae:\n\n"
+            
+            for i, fonte in enumerate(sorted(fontes), 1):
+                # Remove extensão e formata nome do arquivo
+                nome_arquivo = fonte
+                
+                # Cria link para download (ajustar path conforme necessário)
+                # Assumindo estrutura: dados/documentos/categoria/arquivo.pdf
+                link_download = f"/documentos/{fonte}"
+                
+                resposta += f"{i}. **{nome_arquivo}**\n"
+                resposta += f"   📥 [Clique aqui para baixar]({link_download})\n\n"
+            
+            resposta += "\n� *Estes documentos contêm informações detalhadas sobre Fichas Técnicas (FT) e Manuais de Operacionalização (MOA).*\n"
         
-        # Rodapé profissional padrão
+        # Adiciona transparência sobre estratégia utilizada (rodapé)
         resposta += "\n\n---\n"
-        if consultores:
-            resposta += "✨ **Próximos passos:** Além dos consultores indicados acima, posso ajudar a identificar cursos específicos do Sebrae para sua necessidade."
+        
+        if estrategia == "base_interna_oficial":
+            resposta += "✅ *Resposta baseada em documentos oficiais Sebrae*\n"
+        elif estrategia == "busca_ampla_com_resultados_parciais":
+            resposta += "🔍 *Resposta baseada em busca ampla - informações parciais*\n"
+        elif estrategia == "nenhuma_informacao_encontrada":
+            resposta += "❓ *Informação não encontrada na base de conhecimento oficial*\n"
+        
+        # Rodapé com próximos passos
+        if consultores or fontes:
+            resposta += "\n✨ **Precisa de mais ajuda?** Posso fornecer informações adicionais sobre produtos e serviços do Sebrae."
         else:
-            resposta += "💡 **Quer aprofundar?** Posso ajudar a conectar você com consultores especializados ou identificar cursos específicos do Sebrae para sua necessidade."
+            resposta += "\n💡 **Quer aprofundar?** Posso ajudar a conectar você com consultores especializados ou identificar cursos específicos do Sebrae para sua necessidade."
         
         return resposta
